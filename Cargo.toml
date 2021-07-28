@@ -1,0 +1,13 @@
+[package]
+name = "plthook"
+version = "0.1.0"
+edition = "2018"
+authors = [ "ayosec <ayosec@gmail.com" ]
+description = "Wrapper for the plthook library"
+documentation = "https://docs.rs/plthook"
+readme = "README.md"
+homepage = "https://github.com/ayosec/plthook-rs"
+repository = "https://github.com/ayosec/plthook-rs.git"
+license = "Apache-2.0"
+
+[dependencies]
