@@ -11,3 +11,7 @@ repository = "https://github.com/ayosec/plthook-rs.git"
 license = "Apache-2.0"
 
 [dependencies]
+libc = "0.2.98"
+
+[build-dependencies]
+cc = "1.0"
