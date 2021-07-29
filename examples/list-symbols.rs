@@ -13,11 +13,7 @@ fn main() {
         println!("\n{:?}", path);
         match ObjectFile::open_file(path) {
             Ok(o) => print_symbols(o),
-            Err(e) => eprintln!(
-                "{}\nlast_error_message = {}",
-                e,
-                plthook::last_error_message()
-            ),
+            Err(e) => eprintln!("{}", e),
         };
     }
 }

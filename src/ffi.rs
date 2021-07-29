@@ -32,7 +32,8 @@ extern "C" {
 
 pub(crate) mod exts {
     use super::plthook_t;
-    use crate::errors::{Error, Result};
+    use crate::errors::{Error, ErrorKind, Result};
+    use std::ffi::CStr;
     use std::mem::MaybeUninit;
 
     // Wrapper for the `plthook_open` function.
@@ -42,10 +43,8 @@ pub(crate) mod exts {
     // `filename` has be a `NULL`-terminated string, or `NULL`.
     pub(crate) unsafe fn open_cstr(filename: *const libc::c_char) -> Result<plthook_t> {
         let mut c_object = MaybeUninit::uninit();
-        match super::plthook_open(c_object.as_mut_ptr(), filename) {
-            0 => Ok(c_object.assume_init()),
-            e => Err(Error::from(e)),
-        }
+        check(super::plthook_open(c_object.as_mut_ptr(), filename))?;
+        Ok(c_object.assume_init())
     }
 
     // Wrapper for the `plthook_open` function.
@@ -85,17 +84,30 @@ pub(crate) mod exts {
         };
 
         if success == 0 {
-            return Err(Error::FileNotFound);
+            return Err(Error::new(ErrorKind::FileNotFound, String::new()));
         }
 
         let mut object = MaybeUninit::uninit();
-        let ret = unsafe {
-            super::plthook_open_by_handle(object.as_mut_ptr(), handle.assume_init() as *const _)
+        unsafe {
+            check(super::plthook_open_by_handle(
+                object.as_mut_ptr(),
+                handle.assume_init() as *const _,
+            ))?
         };
 
-        match ret {
-            0 => Ok(unsafe { object.assume_init() }),
-            e => Err(Error::from(e)),
+        Ok(unsafe { object.assume_init() })
+    }
+
+    // Check if the response from a C function succeeded.
+    pub(crate) fn check(ret: libc::c_int) -> Result<()> {
+        if ret == 0 {
+            return Ok(());
         }
+
+        // Copy the error message from the library.
+        let msg_ptr = unsafe { CStr::from_ptr(super::plthook_error()) };
+        let errmsg = msg_ptr.to_string_lossy().into_owned();
+
+        Err(Error::new(ErrorKind::from(ret), errmsg))
     }
 }

@@ -1,6 +1,13 @@
 //! Bindings for the [plthook] library.
 //!
+//! # Errors
+//!
+//! Errors are wrapped by the [`Error`] type. When an error is returned from
+//! any [plthook] function, the message from the `plthook_error` function is
+//! included in the [`Error`] instance.
+//!
 //! [plthook]: https://github.com/kubo/plthook
+//! [`Error`]: crate::Error
 
 mod errors;
 mod ffi;
@@ -9,14 +16,14 @@ mod symbols;
 #[cfg(test)]
 mod tests;
 
-use std::ffi::{CStr, CString};
+use std::ffi::CString;
 use std::mem::MaybeUninit;
 use std::path::Path;
 use std::ptr;
 
 use libc::c_void;
 
-pub use errors::{Error, Result};
+pub use errors::{Error, ErrorKind, Result};
 pub use symbols::Symbol;
 
 /// An [object file] loaded in memory.
@@ -46,7 +53,7 @@ impl ObjectFile {
                 // If the string in filename can't be converted to a C string
                 // we assume that it can't be possible to create a file with
                 // that name.
-                return Err(Error::FileNotFound);
+                return Err(Error::new(ErrorKind::FileNotFound, String::new()));
             }
         };
 
@@ -73,17 +80,12 @@ impl ObjectFile {
     ///
     /// [`dlopen`]: https://docs.rs/libc/*/libc/fn.dlopen.html
     pub unsafe fn open_by_handle(handle: *const c_void) -> Result<Self> {
-        let c_object = {
-            let mut object = MaybeUninit::uninit();
-            match ffi::plthook_open_by_handle(object.as_mut_ptr(), handle) {
-                0 => (),
-                e => return Err(Error::from(e)),
-            }
+        let mut object = MaybeUninit::uninit();
+        ffi::exts::check(ffi::plthook_open_by_handle(object.as_mut_ptr(), handle))?;
 
-            object.assume_init()
-        };
-
-        Ok(ObjectFile { c_object })
+        Ok(ObjectFile {
+            c_object: object.assume_init(),
+        })
     }
 
     /// Replace the entry for a symbol in the PLT section, and returns
@@ -105,22 +107,19 @@ impl ObjectFile {
             Err(_) => {
                 // If the name is not a valid C string, we assume that
                 // there is no symbol with that name.
-                return Err(Error::FunctionNotFound);
+                return Err(Error::new(ErrorKind::FunctionNotFound, String::new()));
             }
         };
 
         let mut old_addr = ptr::null();
-        let ret = ffi::plthook_replace(
+        ffi::exts::check(ffi::plthook_replace(
             self.c_object,
             symbol_name.as_ptr(),
             func_address,
             &mut old_addr as *mut _,
-        );
+        ))?;
 
-        match ret {
-            0 => Ok(old_addr),
-            e => Err(Error::from(e)),
-        }
+        Ok(old_addr)
     }
 
     /// Returns an iterator to get all symbols in the PLT section.
@@ -135,10 +134,4 @@ impl Drop for ObjectFile {
             ffi::plthook_close(self.c_object);
         }
     }
-}
-
-/// Return the last error message from `plthook`, if any.
-pub fn last_error_message() -> String {
-    let errmsg = unsafe { CStr::from_ptr(ffi::plthook_error()) };
-    errmsg.to_string_lossy().into_owned()
 }
