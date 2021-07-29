@@ -1,6 +1,7 @@
 /// A specialized [`Result`] type for this crate.
 ///
 /// [`Result`]: ::std::result::Result
+use std::fmt;
 
 pub type Result<T> = ::std::result::Result<T, Error>;
 
@@ -32,3 +33,11 @@ impl From<libc::c_int> for Error {
         }
     }
 }
+
+impl fmt::Display for Error {
+    fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
+        write!(fmt, "Error in plthook: {:?}", self)
+    }
+}
+
+impl std::error::Error for Error {}

@@ -4,17 +4,19 @@
 
 mod errors;
 mod ffi;
+mod symbols;
 
 use std::ffi::CString;
 use std::mem::MaybeUninit;
 
 pub use errors::{Error, Result};
+pub use symbols::Symbol;
 
 /// An [object file] loaded in memory.
 ///
 /// [object file]: https://en.wikipedia.org/wiki/Object_file
 pub struct ObjectFile {
-    object: ffi::plthook_t,
+    c_object: ffi::plthook_t,
 }
 
 impl ObjectFile {
@@ -58,7 +60,7 @@ impl ObjectFile {
     ///
     /// [`dlopen`]: https://docs.rs/libc/*/libc/fn.dlopen.html
     pub unsafe fn open_by_handle(handle: *const libc::c_void) -> Result<Self> {
-        let object = unsafe {
+        let c_object = {
             let mut object = MaybeUninit::uninit();
             match ffi::plthook_open_by_handle(object.as_mut_ptr(), handle) {
                 0 => (),
@@ -68,13 +70,26 @@ impl ObjectFile {
             object.assume_init()
         };
 
-        Ok(ObjectFile { object })
+        Ok(ObjectFile { c_object })
+    }
+
+    /// Returns an iterator to get all symbols in the PLT section.
+    pub fn symbols(&self) -> impl Iterator<Item = Symbol> + '_ {
+        symbols::iterator(self)
+    }
+}
+
+impl Drop for ObjectFile {
+    fn drop(&mut self) {
+        unsafe {
+            ffi::plthook_close(self.c_object);
+        }
     }
 }
 
 // Wrapper for the `plthook_open` function.
 fn plthook_open(filename: *const libc::c_char) -> Result<ObjectFile> {
-    let object = unsafe {
+    let c_object = unsafe {
         let mut object = MaybeUninit::uninit();
         match ffi::plthook_open(object.as_mut_ptr(), filename) {
             0 => (),
@@ -84,5 +99,5 @@ fn plthook_open(filename: *const libc::c_char) -> Result<ObjectFile> {
         object.assume_init()
     };
 
-    Ok(ObjectFile { object })
+    Ok(ObjectFile { c_object })
 }
