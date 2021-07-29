@@ -6,8 +6,14 @@ mod errors;
 mod ffi;
 mod symbols;
 
+#[cfg(test)]
+mod tests;
+
 use std::ffi::{CStr, CString};
 use std::mem::MaybeUninit;
+use std::ptr;
+
+use libc::c_void;
 
 pub use errors::{Error, Result};
 pub use symbols::Symbol;
@@ -22,7 +28,7 @@ pub struct ObjectFile {
 impl ObjectFile {
     /// Load the object for the main program.
     pub fn open_main_program() -> Result<Self> {
-        plthook_open(std::ptr::null())
+        plthook_open(ptr::null())
     }
 
     /// Load an object from a file.
@@ -59,7 +65,7 @@ impl ObjectFile {
     /// `handle` is a valid address.
     ///
     /// [`dlopen`]: https://docs.rs/libc/*/libc/fn.dlopen.html
-    pub unsafe fn open_by_handle(handle: *const libc::c_void) -> Result<Self> {
+    pub unsafe fn open_by_handle(handle: *const c_void) -> Result<Self> {
         let c_object = {
             let mut object = MaybeUninit::uninit();
             match ffi::plthook_open_by_handle(object.as_mut_ptr(), handle) {
@@ -71,6 +77,41 @@ impl ObjectFile {
         };
 
         Ok(ObjectFile { c_object })
+    }
+
+    /// Replace the entry for a symbol in the PLT section, and returns
+    /// the previous value.
+    ///
+    /// # Safety
+    ///
+    /// The caller has to verify that the new address for the symbol is
+    /// valid.
+    pub unsafe fn replace(
+        &self,
+        symbol_name: &str,
+        func_address: *const c_void,
+    ) -> Result<*const c_void> {
+        let symbol_name = match CString::new(symbol_name) {
+            Ok(s) => s,
+            Err(_) => {
+                // If the name is not a valid C string, we assume that
+                // there is no symbol with that name.
+                return Err(Error::FunctionNotFound);
+            }
+        };
+
+        let mut old_addr = ptr::null();
+        let ret = ffi::plthook_replace(
+            self.c_object,
+            symbol_name.as_ptr(),
+            func_address,
+            &mut old_addr as *mut _,
+        );
+
+        match ret {
+            0 => Ok(old_addr),
+            e => Err(Error::from(e)),
+        }
     }
 
     /// Returns an iterator to get all symbols in the PLT section.
@@ -93,7 +134,7 @@ fn plthook_open(filename: *const libc::c_char) -> Result<ObjectFile> {
         let mut object = MaybeUninit::uninit();
         match ffi::plthook_open(object.as_mut_ptr(), filename) {
             0 => (),
-            e => return Err(errors::Error::from(e)),
+            e => return Err(Error::from(e)),
         }
 
         object.assume_init()
