@@ -26,6 +26,8 @@ extern "C" {
         funcaddr: *const c_void,
         oldfunc: *mut *const c_void,
     ) -> c_int;
+
+    pub(crate) fn plthook_error() -> *const c_char;
 }
 
 #[test]

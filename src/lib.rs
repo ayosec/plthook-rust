@@ -6,7 +6,7 @@ mod errors;
 mod ffi;
 mod symbols;
 
-use std::ffi::CString;
+use std::ffi::{CStr, CString};
 use std::mem::MaybeUninit;
 
 pub use errors::{Error, Result};
@@ -100,4 +100,10 @@ fn plthook_open(filename: *const libc::c_char) -> Result<ObjectFile> {
     };
 
     Ok(ObjectFile { c_object })
+}
+
+/// Return the last error message from `plthook`, if any.
+pub fn last_error_message() -> String {
+    let errmsg = unsafe { CStr::from_ptr(ffi::plthook_error()) };
+    errmsg.to_string_lossy().into_owned()
 }
