@@ -30,58 +30,72 @@ extern "C" {
     pub(crate) fn plthook_error() -> *const c_char;
 }
 
-#[test]
-fn replace_fn_in_main_program() {
+pub(crate) mod exts {
+    use super::plthook_t;
+    use crate::errors::{Error, Result};
     use std::mem::MaybeUninit;
 
-    let object = unsafe {
-        let mut object = MaybeUninit::uninit();
-
-        let ret = plthook_open(object.as_mut_ptr(), std::ptr::null());
-        assert_eq!(ret, 0);
-
-        object.assume_init()
-    };
-
-    // Replace atoi with a function that always return 42.
-
-    fn other_atoi(_: *const c_char) -> c_int {
-        42
+    // Wrapper for the `plthook_open` function.
+    //
+    // # Safety
+    //
+    // `filename` has be a `NULL`-terminated string, or `NULL`.
+    pub(crate) unsafe fn open_cstr(filename: *const libc::c_char) -> Result<plthook_t> {
+        let mut c_object = MaybeUninit::uninit();
+        match super::plthook_open(c_object.as_mut_ptr(), filename) {
+            0 => Ok(c_object.assume_init()),
+            e => Err(Error::from(e)),
+        }
     }
 
-    let original_func = unsafe {
-        let mut fnaddr = MaybeUninit::<fn(*const c_char) -> c_int>::uninit();
-        let ret = plthook_replace(
-            object,
-            b"atoi\0".as_ptr().cast(),
-            other_atoi as *const _,
-            fnaddr.as_mut_ptr() as *mut _,
-        );
+    // Wrapper for the `plthook_open` function.
+    //
+    // The current implementation of `plthook_open` uses `GetModuleHandleExA`
+    // to load the file. To be able to use it, we have to convert the file name
+    // in two steps:
+    //
+    // 1. To a UTF-16 string, with `OsStrExt::encode_wide`.
+    // 2. Then, to an ANSI string with `WideCharToMultiByte`.
+    //
+    // It is possible that final string can't represent the exact same string,
+    // depending on system code page. Though this is very unlikely.
+    //
+    // Instead of using the `plthook_open` from the C library, we reimplement
+    // it with `GetModuleHandleExW`, so we can use the UTF-16 string, instead
+    // of the ANSI string equivalent.
+    #[cfg(windows)]
+    pub(crate) fn open_path_win32<S>(filename: S) -> Result<plthook_t>
+    where
+        S: AsRef<std::ffi::OsStr>,
+    {
+        use std::os::windows::ffi::OsStrExt;
+        use winapi::um::libloaderapi as l;
 
-        assert_eq!(ret, 0);
+        let mut filename: Vec<u16> = filename.as_ref().encode_wide().collect();
+        filename.push(0);
 
-        fnaddr.assume_init()
-    };
+        let mut handle = MaybeUninit::uninit();
 
-    let param = b"123\0".as_ptr().cast();
+        let success = unsafe {
+            l::GetModuleHandleExW(
+                l::GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                filename.as_ptr(),
+                handle.as_mut_ptr(),
+            )
+        };
 
-    assert_eq!(unsafe { libc::atoi(param) }, 42);
-    assert_eq!((original_func)(param), 123);
+        if success == 0 {
+            return Err(Error::FileNotFound);
+        }
 
-    // Restore original atoi function.
+        let mut object = MaybeUninit::uninit();
+        let ret = unsafe {
+            super::plthook_open_by_handle(object.as_mut_ptr(), handle.assume_init() as *const _)
+        };
 
-    unsafe {
-        let ret = plthook_replace(
-            object,
-            b"atoi\0".as_ptr().cast(),
-            original_func as *const _,
-            std::ptr::null_mut(),
-        );
-
-        assert_eq!(ret, 0);
-    };
-
-    assert_eq!(unsafe { libc::atoi(param) }, 123);
-
-    unsafe { plthook_close(object) };
+        match ret {
+            0 => Ok(unsafe { object.assume_init() }),
+            e => Err(Error::from(e)),
+        }
+    }
 }

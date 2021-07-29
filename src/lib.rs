@@ -11,6 +11,7 @@ mod tests;
 
 use std::ffi::{CStr, CString};
 use std::mem::MaybeUninit;
+use std::path::Path;
 use std::ptr;
 
 use libc::c_void;
@@ -28,15 +29,13 @@ pub struct ObjectFile {
 impl ObjectFile {
     /// Load the object for the main program.
     pub fn open_main_program() -> Result<Self> {
-        plthook_open(ptr::null())
+        let res = unsafe { ffi::exts::open_cstr(ptr::null()) };
+        res.map(|c_object| ObjectFile { c_object })
     }
 
     /// Load an object from a file.
     #[cfg(unix)]
-    pub fn open_file<P: AsRef<std::path::Path>>(filename: P) -> Result<Self> {
-        // This function is not available in Windows because the standard
-        // library does not provide a way to convert `Path` to `CString`.
-
+    pub fn open_file<P: AsRef<Path>>(filename: P) -> Result<Self> {
         use std::ffi::OsStr;
         use std::os::unix::ffi::OsStrExt;
 
@@ -51,7 +50,15 @@ impl ObjectFile {
             }
         };
 
-        plthook_open(filename.as_ptr())
+        let res = unsafe { ffi::exts::open_cstr(filename.as_ptr()) };
+        res.map(|c_object| ObjectFile { c_object })
+    }
+
+    /// Load an object from a file.
+    #[cfg(windows)]
+    pub fn open_file<P: AsRef<Path>>(filename: P) -> Result<Self> {
+        let res = ffi::exts::open_path_win32(filename.as_ref());
+        res.map(|c_object| ObjectFile { c_object })
     }
 
     /// Load a dynamic loaded shared object.
@@ -126,21 +133,6 @@ impl Drop for ObjectFile {
             ffi::plthook_close(self.c_object);
         }
     }
-}
-
-// Wrapper for the `plthook_open` function.
-fn plthook_open(filename: *const libc::c_char) -> Result<ObjectFile> {
-    let c_object = unsafe {
-        let mut object = MaybeUninit::uninit();
-        match ffi::plthook_open(object.as_mut_ptr(), filename) {
-            0 => (),
-            e => return Err(Error::from(e)),
-        }
-
-        object.assume_init()
-    };
-
-    Ok(ObjectFile { c_object })
 }
 
 /// Return the last error message from `plthook`, if any.
