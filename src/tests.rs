@@ -78,10 +78,11 @@ fn use_c_api() {
     unsafe { plthook_close(object) };
 }
 
+#[cfg(not(target_os = "macos"))]
 #[test]
 fn open_shared_object() {
     #[cfg(unix)]
-    let soname = "librt.so";
+    let soname = "libc.so.6";
 
     #[cfg(windows)]
     let soname = "kernel32.dll";
