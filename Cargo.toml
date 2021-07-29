@@ -3,12 +3,17 @@ name = "plthook"
 version = "0.1.0"
 edition = "2018"
 authors = [ "ayosec <ayosec@gmail.com" ]
-description = "Wrapper for the plthook library"
+description = "Bindings for the plthook library"
 documentation = "https://docs.rs/plthook"
 readme = "README.md"
-homepage = "https://github.com/ayosec/plthook-rs"
-repository = "https://github.com/ayosec/plthook-rs.git"
+homepage = "https://github.com/ayosec/plthook-rust"
+repository = "https://github.com/ayosec/plthook-rust.git"
 license = "Apache-2.0"
+
+exclude = [
+    ".github/**",
+    "vendor/*.sh",
+]
 
 [dependencies]
 libc = "0.2.98"
