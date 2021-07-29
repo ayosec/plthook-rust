@@ -20,15 +20,15 @@ fn replace_atof() {
 
     let object = ObjectFile::open_main_program().unwrap();
 
-    assert_eq!(unsafe { libc::atof(param) }, 100.0);
+    assert_eq!(unsafe { libc::atof(param) as u64 }, 100);
 
     let initial_atof = unsafe { object.replace("atof", other_atof as *const _).unwrap() };
 
-    assert_eq!(unsafe { libc::atof(param) }, 42.0);
+    assert_eq!(unsafe { libc::atof(param) as u64 }, 42);
 
-    unsafe { object.replace("atof", initial_atof).unwrap() };
+    unsafe { object.replace("atof", initial_atof as *const _).unwrap() };
 
-    assert_eq!(unsafe { libc::atof(param) }, 100.0);
+    assert_eq!(unsafe { libc::atof(param) as u64 }, 100);
 
     drop(lock);
 }

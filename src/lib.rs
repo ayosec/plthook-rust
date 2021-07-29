@@ -1,5 +1,73 @@
 //! Bindings for the [plthook] library.
 //!
+//! This crates allows hooking library function calls in a running process.
+//! Please see the description of the [plthook] library for more details.
+//!
+//! # Usage
+//!
+//! The main item in this crate is [`ObjectFile`]. Using its `open_*` functions
+//! you can access to the PLT (Unix) or IAT (Windows) entries in the loaded
+//! object files.
+//!
+//! ## Symbols in object files
+//!
+//! Use [`ObjectFile::symbols`] to get all symbols in the object file.
+//!
+//! ```
+//! # let _fn = || -> Result<(), plthook::Error> {
+//! # use plthook::ObjectFile;
+//! let object = ObjectFile::open_main_program()?;
+//! for symbol in object.symbols() {
+//!     println!("{:?} {:?}", symbol.func_address, symbol.name);
+//! }
+//! # Ok(()) };
+//! ```
+//!
+//! ## Invoking functions
+//!
+//! The addresses emitted by [`ObjectFile::symbols`] can be used to invoke
+//! functions directly.
+//!
+//! You have to cast the address to the correct function type.
+//!
+//! ```
+//! # #[cfg(target_os = "linux")] {
+//! # use plthook::ObjectFile;
+//! let pid = std::process::id();
+//!
+//! let object = ObjectFile::open_main_program().unwrap();
+//! let getpid_fn = object
+//!     .symbols()
+//!     .find(|sym| sym.name.to_str() == Ok("getpid"))
+//!     .unwrap()
+//!     .func_address as *const fn() -> libc::pid_t;
+//!
+//! assert_eq!(pid, unsafe { (*getpid_fn)() as u32 });
+//! # }
+//! ```
+//!
+//! ## Replacing functions
+//!
+//! [`ObjectFile::replace`] is used to modify a function entry. It returns the
+//! previous address.
+//!
+//! ```
+//! # let func = || -> Result<(), plthook::Error> {
+//! # use plthook::ObjectFile;
+//! fn new_fn() -> u8 { 1 }
+//!
+//! let object = ObjectFile::open_main_program()?;
+//!
+//! let old_fn = unsafe {
+//!     object.replace("foo_fn", new_fn as *const _).unwrap()
+//! };
+//!
+//! // Now, foo_fn() returns 1.
+//! # let _ = old_fn;
+//! # Ok(())
+//! # };
+//! ```
+//!
 //! # Errors
 //!
 //! Errors are wrapped by the [`Error`] type. When an error is returned from
@@ -7,6 +75,10 @@
 //! included in the [`Error`] instance.
 //!
 //! [plthook]: https://github.com/kubo/plthook
+//! [`Symbol`]: crate::Symbol
+//! [`ObjectFile`]: crate::ObjectFile
+//! [`ObjectFile::symbols`]: crate::ObjectFile::symbols
+//! [`ObjectFile::replace`]: crate::ObjectFile::replace
 //! [`Error`]: crate::Error
 
 mod errors;
@@ -27,6 +99,8 @@ pub use errors::{Error, ErrorKind, Result};
 pub use symbols::Symbol;
 
 /// An [object file] loaded in memory.
+///
+/// Please see the [top-level documentation](crate) for more details.
 ///
 /// [object file]: https://en.wikipedia.org/wiki/Object_file
 pub struct ObjectFile {
@@ -88,8 +162,8 @@ impl ObjectFile {
         })
     }
 
-    /// Replace the entry for a symbol in the PLT section, and returns
-    /// the previous value.
+    /// Replace the address for a symbol in the PLT section, and returns
+    /// the previous address.
     ///
     /// # Safety
     ///
@@ -111,18 +185,31 @@ impl ObjectFile {
             }
         };
 
-        let mut old_addr = ptr::null();
+        let mut old_addr = MaybeUninit::uninit();
         ffi::exts::check(ffi::plthook_replace(
             self.c_object,
             symbol_name.as_ptr(),
             func_address,
-            &mut old_addr as *mut _,
+            old_addr.as_mut_ptr(),
         ))?;
 
-        Ok(old_addr)
+        Ok(old_addr.assume_init())
     }
 
     /// Returns an iterator to get all symbols in the PLT section.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// # let _fn = || -> Result<(), plthook::Error> {
+    /// use plthook::ObjectFile;
+    ///
+    /// let object = ObjectFile::open_main_program()?;
+    /// for symbol in object.symbols() {
+    ///     println!("{:?} {:?}", symbol.func_address, symbol.name);
+    /// }
+    /// # Ok(()) };
+    /// ```
     pub fn symbols(&self) -> impl Iterator<Item = Symbol> + '_ {
         symbols::iterator(self)
     }
