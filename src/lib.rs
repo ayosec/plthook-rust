@@ -93,6 +93,8 @@ impl ObjectFile {
     ///
     /// The caller has to verify that the new address for the symbol is
     /// valid.
+    ///
+    /// The function is not thread-safe.
     pub unsafe fn replace(
         &self,
         symbol_name: &str,

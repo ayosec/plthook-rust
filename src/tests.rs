@@ -1,12 +1,20 @@
 use crate::ffi::*;
 use crate::ObjectFile;
 use libc::{c_char, c_double, c_int};
+use std::mem::MaybeUninit;
+use std::sync::Mutex;
+
+lazy_static::lazy_static! {
+    static ref MUTEX: Mutex<()> = Mutex::new(());
+}
 
 #[test]
 fn replace_atof() {
     fn other_atof(_: *const c_char) -> c_double {
         42.0
     }
+
+    let lock = MUTEX.lock().unwrap();
 
     let param = b"100\0".as_ptr().cast();
 
@@ -21,10 +29,13 @@ fn replace_atof() {
     unsafe { object.replace("atof", initial_atof).unwrap() };
 
     assert_eq!(unsafe { libc::atof(param) }, 100.0);
+
+    drop(lock);
 }
+
 #[test]
 fn use_c_api() {
-    use std::mem::MaybeUninit;
+    let lock = MUTEX.lock().unwrap();
 
     let object = unsafe {
         let mut object = MaybeUninit::uninit();
@@ -76,6 +87,8 @@ fn use_c_api() {
     assert_eq!(unsafe { libc::atoi(param) }, 123);
 
     unsafe { plthook_close(object) };
+
+    drop(lock);
 }
 
 #[cfg(not(target_os = "macos"))]
