@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# Download file source files for the latest version of plthook.
+# Download source files for the latest version of plthook.
 #
 # It requires the bsdtar and curl/wget commands.
 #
