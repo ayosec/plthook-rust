@@ -75,6 +75,7 @@ use std::ffi::CString;
 use std::mem::MaybeUninit;
 use std::path::Path;
 use std::ptr;
+use std::rc::Rc;
 
 use libc::c_void;
 
@@ -86,15 +87,23 @@ pub use symbols::Symbol;
 /// Please see the [top-level documentation](crate) for more details.
 ///
 /// [object file]: https://en.wikipedia.org/wiki/Object_file
-pub struct ObjectFile {
+pub struct ObjectFile(Rc<ObjectFileInner>);
+
+/// Wrapper for the C object.
+struct ObjectFileInner {
     c_object: ffi::plthook_t,
 }
 
 impl ObjectFile {
+    /// New instance from the raw C object.
+    fn new(c_object: ffi::plthook_t) -> ObjectFile {
+        ObjectFile(Rc::new(ObjectFileInner { c_object }))
+    }
+
     /// Load the object for the main program.
     pub fn open_main_program() -> Result<Self> {
         let res = unsafe { ffi::exts::open_cstr(ptr::null()) };
-        res.map(|c_object| ObjectFile { c_object })
+        res.map(ObjectFile::new)
     }
 
     /// Load an object from a file.
@@ -115,14 +124,14 @@ impl ObjectFile {
         };
 
         let res = unsafe { ffi::exts::open_cstr(filename.as_ptr()) };
-        res.map(|c_object| ObjectFile { c_object })
+        res.map(ObjectFile::new)
     }
 
     /// Load an object from a file.
     #[cfg(windows)]
     pub fn open_file<P: AsRef<Path>>(filename: P) -> Result<Self> {
         let res = ffi::exts::open_path_win32(filename.as_ref());
-        res.map(|c_object| ObjectFile { c_object })
+        res.map(ObjectFile::new)
     }
 
     /// Load a dynamic loaded shared object.
@@ -140,9 +149,7 @@ impl ObjectFile {
         let mut object = MaybeUninit::uninit();
         ffi::exts::check(ffi::plthook_open_by_handle(object.as_mut_ptr(), handle))?;
 
-        Ok(ObjectFile {
-            c_object: object.assume_init(),
-        })
+        Ok(ObjectFile::new(object.assume_init()))
     }
 
     /// Replace the address of a symbol in the PLT section, and returns a
@@ -172,14 +179,16 @@ impl ObjectFile {
     ///     -1
     /// }
     ///
-    /// let program = ObjectFile::open_main_program().unwrap();
-    /// let entry = unsafe {
-    ///     program.replace("getpid", broken_getpid as *const _).unwrap()
+    /// let replacement = unsafe {
+    ///     ObjectFile::open_main_program()
+    ///         .unwrap()
+    ///         .replace("getpid", broken_getpid as *const _)
+    ///         .unwrap()
     /// };
     ///
     /// assert_eq!(process::id(), u32::MAX);
     ///
-    /// drop(entry);
+    /// drop(replacement);
     /// assert_eq!(process::id(), pid);
     /// # }
     /// ```
@@ -187,7 +196,7 @@ impl ObjectFile {
         &self,
         symbol_name: &str,
         func_address: *const c_void,
-    ) -> Result<Replacement<'_>> {
+    ) -> Result<Replacement> {
         let symbol_name = match CString::new(symbol_name) {
             Ok(s) => s,
             Err(_) => {
@@ -199,14 +208,14 @@ impl ObjectFile {
 
         let mut old_addr = MaybeUninit::uninit();
         ffi::exts::check(ffi::plthook_replace(
-            self.c_object,
+            self.0.c_object,
             symbol_name.as_ptr(),
             func_address,
             old_addr.as_mut_ptr(),
         ))?;
 
         Ok(Replacement {
-            object: self,
+            object: Rc::clone(&self.0),
             symbol_name,
             address: old_addr.assume_init(),
         })
@@ -231,7 +240,7 @@ impl ObjectFile {
     }
 }
 
-impl Drop for ObjectFile {
+impl Drop for ObjectFileInner {
     fn drop(&mut self) {
         unsafe {
             ffi::plthook_close(self.c_object);
@@ -242,13 +251,13 @@ impl Drop for ObjectFile {
 /// A replacement of an entry in the PLT section.
 ///
 /// The address in the PLT entry is restored when this value is dropped.
-pub struct Replacement<'a> {
-    object: &'a ObjectFile,
+pub struct Replacement {
+    object: Rc<ObjectFileInner>,
     symbol_name: CString,
     address: *const c_void,
 }
 
-impl Replacement<'_> {
+impl Replacement {
     /// Returns the original address of the PLT entry.
     ///
     /// This address can be used to invoke the function replaced by
@@ -298,7 +307,7 @@ impl Replacement<'_> {
     }
 }
 
-impl<'a> Drop for Replacement<'a> {
+impl Drop for Replacement {
     fn drop(&mut self) {
         unsafe {
             let _ = ffi::exts::check(ffi::plthook_replace(

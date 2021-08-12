@@ -60,7 +60,7 @@ impl<'a> Iterator for SymbolIterator<'a> {
 
         let ret = unsafe {
             plthook_enum(
-                self.object.c_object,
+                self.object.0.c_object,
                 &mut self.pos,
                 name.as_mut_ptr(),
                 func_address.as_mut_ptr() as *mut _,
