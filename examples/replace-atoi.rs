@@ -1,8 +1,8 @@
 //! Replace atoi to return the negative value of the real atoi().
 
-use libc::{c_char, c_int};
 use plthook::ObjectFile;
-use std::mem::MaybeUninit;
+use std::mem::{self, MaybeUninit};
+use std::os::raw::{c_char, c_int};
 
 static mut ATOI_FN: MaybeUninit<fn(*const c_char) -> c_int> = MaybeUninit::uninit();
 
@@ -15,8 +15,9 @@ fn main() {
     let object = ObjectFile::open_main_program().expect("Failed to open main program");
 
     unsafe {
-        let atoi_fn = ATOI_FN.as_mut_ptr() as *mut _;
-        *atoi_fn = object.replace("atoi", neg_atoi as *const _).unwrap();
+        let atoi_entry = object.replace("atoi", neg_atoi as *const _).unwrap();
+        ATOI_FN = MaybeUninit::new(mem::transmute(atoi_entry.original_address()));
+        atoi_entry.forget();
     };
 
     let i = unsafe { libc::atoi(b"100\0".as_ptr().cast()) };

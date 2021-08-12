@@ -54,3 +54,9 @@ jobs:
         with:
           command: run
           args: --example list-symbols
+
+      - name: Run replace-atoi example.
+        uses: actions-rs/cargo@v1
+        with:
+          command: run
+          args: --example replace-atoi
