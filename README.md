@@ -42,9 +42,9 @@ fn main() {
     let object = ObjectFile::open_main_program().expect("Failed to open main program");
 
     unsafe {
-        let atoi_entry = object.replace("atoi", neg_atoi as *const _).unwrap();
+        let mut atoi_entry = object.replace("atoi", neg_atoi as *const _).unwrap();
         ATOI_FN = MaybeUninit::new(mem::transmute(atoi_entry.original_address()));
-        atoi_entry.forget();
+        atoi_entry.discard();
     };
 
     let i = unsafe { libc::atoi(b"100\0".as_ptr().cast()) };

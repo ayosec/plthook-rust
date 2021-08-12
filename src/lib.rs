@@ -215,8 +215,10 @@ impl ObjectFile {
         ))?;
 
         Ok(Replacement {
-            object: Rc::clone(&self.0),
-            symbol_name,
+            restore_ref: Some(RestoreRef {
+                object: Rc::clone(&self.0),
+                symbol_name,
+            }),
             address: old_addr.assume_init(),
         })
     }
@@ -252,9 +254,14 @@ impl Drop for ObjectFileInner {
 ///
 /// The address in the PLT entry is restored when this value is dropped.
 pub struct Replacement {
+    restore_ref: Option<RestoreRef>,
+    address: *const c_void,
+}
+
+/// Reference to restore a symbol when `Replacement` is dropped.
+struct RestoreRef {
     object: Rc<ObjectFileInner>,
     symbol_name: CString,
-    address: *const c_void,
 }
 
 impl Replacement {
@@ -300,22 +307,24 @@ impl Replacement {
         self.address
     }
 
-    /// Discard this replacement to avoid restoring the original address when
-    /// this value is dropped.
-    pub fn forget(self) {
-        std::mem::forget(self)
+    /// Discard this replacement, so the original address will not be restored
+    /// when this replacement is dropped.
+    pub fn discard(&mut self) {
+        self.restore_ref = None;
     }
 }
 
 impl Drop for Replacement {
     fn drop(&mut self) {
         unsafe {
-            let _ = ffi::exts::check(ffi::plthook_replace(
-                self.object.c_object,
-                self.symbol_name.as_ptr(),
-                self.address,
-                ptr::null_mut(),
-            ));
+            if let Some(restore_ref) = self.restore_ref.take() {
+                let _ = ffi::exts::check(ffi::plthook_replace(
+                    restore_ref.object.c_object,
+                    restore_ref.symbol_name.as_ptr(),
+                    self.address,
+                    ptr::null_mut(),
+                ));
+            }
         };
     }
 }
