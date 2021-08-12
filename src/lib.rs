@@ -25,7 +25,7 @@
 //!
 //! ## Invoking functions
 //!
-//! The addresses emitted by [`ObjectFile::symbols`] can be used to invoke
+//! The addresses yielded by [`ObjectFile::symbols`] can be used to invoke
 //! functions directly.
 //!
 //! You have to cast the address to the correct function type.
@@ -48,25 +48,8 @@
 //!
 //! ## Replacing functions
 //!
-//! [`ObjectFile::replace`] is used to modify a function entry. It returns the
-//! previous address.
-//!
-//! ```
-//! # let func = || -> Result<(), plthook::Error> {
-//! # use plthook::ObjectFile;
-//! fn new_fn() -> u8 { 1 }
-//!
-//! let object = ObjectFile::open_main_program()?;
-//!
-//! let old_fn = unsafe {
-//!     object.replace("foo_fn", new_fn as *const _).unwrap()
-//! };
-//!
-//! // Now, foo_fn() returns 1.
-//! # let _ = old_fn;
-//! # Ok(())
-//! # };
-//! ```
+//! [`ObjectFile::replace`] replaces an entry in the PLT table, and returns a
+//! reference to the previous value.
 //!
 //! # Errors
 //!
@@ -162,8 +145,12 @@ impl ObjectFile {
         })
     }
 
-    /// Replace the address for a symbol in the PLT section, and returns
-    /// the previous address.
+    /// Replace the address of a symbol in the PLT section, and returns a
+    /// reference to the previous entry. When this reference is dropped, the
+    /// entry is restored to the previous value.
+    ///
+    /// The reference to the previous entry can be used to invoke the original
+    /// function.
     ///
     /// # Safety
     ///
@@ -171,11 +158,34 @@ impl ObjectFile {
     /// valid.
     ///
     /// The function is not thread-safe.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use plthook::ObjectFile;
+    /// use std::process;
+    ///
+    /// let pid = process::id();
+    ///
+    /// extern "C" fn broken_getpid() -> libc::pid_t {
+    ///     -1
+    /// }
+    ///
+    /// let program = ObjectFile::open_main_program().unwrap();
+    /// let entry = unsafe {
+    ///     program.replace("getpid", broken_getpid as *const _).unwrap()
+    /// };
+    ///
+    /// assert_eq!(process::id(), u32::MAX);
+    ///
+    /// drop(entry);
+    /// assert_eq!(process::id(), pid);
+    /// ```
     pub unsafe fn replace(
         &self,
         symbol_name: &str,
         func_address: *const c_void,
-    ) -> Result<*const c_void> {
+    ) -> Result<Replacement<'_>> {
         let symbol_name = match CString::new(symbol_name) {
             Ok(s) => s,
             Err(_) => {
@@ -193,7 +203,11 @@ impl ObjectFile {
             old_addr.as_mut_ptr(),
         ))?;
 
-        Ok(old_addr.assume_init())
+        Ok(Replacement {
+            object: self,
+            symbol_name,
+            address: old_addr.assume_init(),
+        })
     }
 
     /// Returns an iterator to get all symbols in the PLT section.
@@ -220,5 +234,75 @@ impl Drop for ObjectFile {
         unsafe {
             ffi::plthook_close(self.c_object);
         }
+    }
+}
+
+/// A replacement of an entry in the PLT section.
+///
+/// The address in the PLT entry is restored when this value is dropped.
+pub struct Replacement<'a> {
+    object: &'a ObjectFile,
+    symbol_name: CString,
+    address: *const c_void,
+}
+
+impl Replacement<'_> {
+    /// Returns the original address of the PLT entry.
+    ///
+    /// This address can be used to invoke the function replaced by
+    /// [`ObjectFile::replace`].
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use plthook::ObjectFile;
+    /// use std::mem;
+    ///
+    /// extern "C" fn broken_getpid() -> libc::pid_t {
+    ///     -1
+    /// }
+    ///
+    /// let program = ObjectFile::open_main_program().unwrap();
+    ///
+    /// let pid = unsafe { libc::getpid() };
+    /// assert_ne!(pid, -1);
+    ///
+    /// // Replace getpid with our broken function.
+    ///
+    /// let replacement = unsafe {
+    ///     program.replace("getpid", broken_getpid as *const _).unwrap()
+    /// };
+    ///
+    /// let libc_getpid: extern "C" fn() -> libc::pid_t = unsafe {
+    ///     mem::transmute(replacement.original_address())
+    /// };
+    ///
+    /// assert_eq!(unsafe { libc::getpid() }, -1);
+    /// assert_eq!(unsafe { (libc_getpid)() }, pid);
+    ///
+    /// drop(replacement);
+    /// assert_eq!(unsafe { libc::getpid() }, pid);
+    /// ```
+    pub fn original_address(&self) -> *const c_void {
+        self.address
+    }
+
+    /// Discard this replacement to avoid restoring the original address when
+    /// this value is dropped.
+    pub fn forget(self) {
+        std::mem::forget(self)
+    }
+}
+
+impl<'a> Drop for Replacement<'a> {
+    fn drop(&mut self) {
+        unsafe {
+            let _ = ffi::exts::check(ffi::plthook_replace(
+                self.object.c_object,
+                self.symbol_name.as_ptr(),
+                self.address,
+                ptr::null_mut(),
+            ));
+        };
     }
 }

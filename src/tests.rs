@@ -26,7 +26,7 @@ fn replace_atof() {
 
     assert_eq!(unsafe { libc::atof(param) as u64 }, 42);
 
-    unsafe { object.replace("atof", initial_atof as *const _).unwrap() };
+    drop(initial_atof);
 
     assert_eq!(unsafe { libc::atof(param) as u64 }, 100);
 
