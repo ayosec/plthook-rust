@@ -162,6 +162,7 @@ impl ObjectFile {
     /// # Example
     ///
     /// ```
+    /// # #[cfg(target_os = "linux")] {
     /// use plthook::ObjectFile;
     /// use std::process;
     ///
@@ -180,6 +181,7 @@ impl ObjectFile {
     ///
     /// drop(entry);
     /// assert_eq!(process::id(), pid);
+    /// # }
     /// ```
     pub unsafe fn replace(
         &self,
@@ -255,6 +257,7 @@ impl Replacement<'_> {
     /// # Example
     ///
     /// ```
+    /// # #[cfg(target_os = "linux")] {
     /// use plthook::ObjectFile;
     /// use std::mem;
     ///
@@ -282,6 +285,7 @@ impl Replacement<'_> {
     ///
     /// drop(replacement);
     /// assert_eq!(unsafe { libc::getpid() }, pid);
+    /// # }
     /// ```
     pub fn original_address(&self) -> *const c_void {
         self.address
