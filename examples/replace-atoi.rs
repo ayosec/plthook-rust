@@ -6,7 +6,7 @@ use std::mem::MaybeUninit;
 
 static mut ATOI_FN: MaybeUninit<fn(*const c_char) -> c_int> = MaybeUninit::uninit();
 
-fn neg_atoi(nptr: *const c_char) -> c_int {
+extern "C" fn neg_atoi(nptr: *const c_char) -> c_int {
     let i = unsafe { (ATOI_FN.assume_init())(nptr) };
     -i
 }

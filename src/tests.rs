@@ -10,7 +10,7 @@ lazy_static::lazy_static! {
 
 #[test]
 fn replace_atof() {
-    fn other_atof(_: *const c_char) -> c_double {
+    extern "C" fn other_atof(_: *const c_char) -> c_double {
         42.0
     }
 
@@ -48,7 +48,7 @@ fn use_c_api() {
 
     // Replace atoi with a function that always return 42.
 
-    fn other_atoi(_: *const c_char) -> c_int {
+    extern "C" fn other_atoi(_: *const c_char) -> c_int {
         42
     }
 
