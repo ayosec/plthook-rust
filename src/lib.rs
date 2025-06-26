@@ -18,7 +18,7 @@
 //! # use plthook::ObjectFile;
 //! let object = ObjectFile::open_main_program()?;
 //! for symbol in object.symbols() {
-//!     println!("{:?} {:?}", symbol.func_address, symbol.name);
+//!     println!("{:?} {:?} {}", symbol.func_address, symbol.name, symbol.protection);
 //! }
 //! # Ok(()) };
 //! ```

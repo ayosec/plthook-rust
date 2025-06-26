@@ -13,11 +13,13 @@ extern "C" {
 
     pub(crate) fn plthook_close(object: plthook_t) -> c_void;
 
-    pub(crate) fn plthook_enum(
+    #[cfg(not(windows))]
+    pub(crate) fn plthook_enum_with_prot(
         object: plthook_t,
         pos: *mut c_uint,
         name_out: *mut *const c_char,
         addr_out: *mut *const *const c_void,
+        prot: *mut c_int,
     ) -> c_int;
 
     pub(crate) fn plthook_replace(
@@ -28,6 +30,26 @@ extern "C" {
     ) -> c_int;
 
     pub(crate) fn plthook_error() -> *const c_char;
+}
+
+#[cfg(windows)]
+pub(crate) unsafe fn plthook_enum_with_prot(
+    object: plthook_t,
+    pos: *mut c_uint,
+    name_out: *mut *const c_char,
+    addr_out: *mut *const *const c_void,
+    _prot: *mut c_int,
+) -> c_int {
+    extern "C" {
+        fn plthook_enum(
+            object: plthook_t,
+            pos: *mut c_uint,
+            name_out: *mut *const c_char,
+            addr_out: *mut *const *const c_void,
+        ) -> c_int;
+    }
+
+    plthook_enum(object, pos, name_out, addr_out)
 }
 
 pub(crate) mod exts {

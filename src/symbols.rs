@@ -1,6 +1,6 @@
-//! Iterator to get symbols with `plthook_enum`.
+//! Iterator to get symbols with `plthook_enum_with_prot`.
 
-use crate::ffi::plthook_enum;
+use crate::ffi::plthook_enum_with_prot;
 use libc::c_uint;
 use std::ffi::{CStr, CString};
 use std::mem::MaybeUninit;
@@ -40,6 +40,16 @@ pub struct Symbol {
 
     /// Pointer to the address of the symbol.
     pub func_address: *const fn(),
+
+    /// Memory protection. A bitwise-OR of [`PROT_READ`], [`PROT_WRITE`]
+    /// and [`PROT_EXEC`].
+    ///
+    /// Currently, on MSWindows this value is always `0`.
+    ///
+    /// [`PROT_READ`]: https://docs.rs/libc/latest/libc/constant.PROT_READ.html
+    /// [`PROT_WRITE`]: https://docs.rs/libc/latest/libc/constant.PROT_WRITE.html
+    /// [`PROT_EXEC`]: https://docs.rs/libc/latest/libc/constant.PROT_EXEC.html
+    pub protection: std::ffi::c_int,
 }
 
 pub(crate) fn iterator(object: &crate::ObjectFile) -> SymbolIterator {
@@ -51,19 +61,21 @@ pub(crate) struct SymbolIterator<'a> {
     object: &'a crate::ObjectFile,
 }
 
-impl<'a> Iterator for SymbolIterator<'a> {
+impl Iterator for SymbolIterator<'_> {
     type Item = Symbol;
 
     fn next(&mut self) -> Option<Symbol> {
         let mut name = MaybeUninit::uninit();
         let mut func_address = MaybeUninit::uninit();
+        let mut protection = 0;
 
         let ret = unsafe {
-            plthook_enum(
+            plthook_enum_with_prot(
                 self.object.0.c_object,
                 &mut self.pos,
                 name.as_mut_ptr(),
                 func_address.as_mut_ptr() as *mut _,
+                &mut protection,
             )
         };
 
@@ -77,6 +89,10 @@ impl<'a> Iterator for SymbolIterator<'a> {
         let name = unsafe { CStr::from_ptr(name.assume_init()).into() };
         let func_address = unsafe { func_address.assume_init() };
 
-        Some(Symbol { name, func_address })
+        Some(Symbol {
+            name,
+            func_address,
+            protection,
+        })
     }
 }
