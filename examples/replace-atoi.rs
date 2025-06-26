@@ -1,5 +1,7 @@
 //! Replace atoi to return the negative value of the real atoi().
 
+#![allow(clippy::missing_transmute_annotations)]
+
 use plthook::ObjectFile;
 use std::mem::{self, MaybeUninit};
 use std::os::raw::{c_char, c_int};

@@ -17,6 +17,6 @@ fn main() {
     };
 
     cc::Build::new()
-        .file(format!("vendor/plthook/plthook_{}.c", suffix))
+        .file(format!("vendor/plthook/plthook_{suffix}.c"))
         .compile("plthook-sys");
 }

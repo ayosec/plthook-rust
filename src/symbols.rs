@@ -1,9 +1,9 @@
 //! Iterator to get symbols with `plthook_enum_with_prot`.
 
-use crate::ffi::plthook_enum_with_prot;
-use libc::c_uint;
-use std::ffi::{CStr, CString};
+use std::ffi::{c_uint, CStr, CString};
 use std::mem::MaybeUninit;
+
+use crate::ffi::plthook_enum_with_prot;
 
 /// A symbol found in the PLT section.
 ///
@@ -52,7 +52,7 @@ pub struct Symbol {
     pub protection: std::ffi::c_int,
 }
 
-pub(crate) fn iterator(object: &crate::ObjectFile) -> SymbolIterator {
+pub(crate) fn iterator(object: &crate::ObjectFile) -> SymbolIterator<'_> {
     SymbolIterator { pos: 0, object }
 }
 

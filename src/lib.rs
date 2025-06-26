@@ -71,13 +71,11 @@ mod symbols;
 #[cfg(test)]
 mod tests;
 
-use std::ffi::CString;
+use std::ffi::{c_void, CString};
 use std::mem::MaybeUninit;
 use std::path::Path;
 use std::ptr;
 use std::rc::Rc;
-
-use libc::c_void;
 
 pub use errors::{Error, ErrorKind, Result};
 pub use symbols::Symbol;

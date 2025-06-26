@@ -15,9 +15,6 @@ exclude = [
     "vendor/*.sh",
 ]
 
-[dependencies]
-libc = "0.2.98"
-
 [target.'cfg(windows)'.dependencies]
 winapi = { version = "0.3", features = ["libloaderapi"] }
 
@@ -26,3 +23,4 @@ cc = "1.0"
 
 [dev-dependencies]
 lazy_static = "1"
+libc = "0.2.98"

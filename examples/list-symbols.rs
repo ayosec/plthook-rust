@@ -2,7 +2,7 @@
 //!
 //! It accepts shared objects as command line arguments.
 
-use std::{env, fmt, mem};
+use std::{env, ffi::c_int, fmt, mem};
 
 use plthook::ObjectFile;
 
@@ -35,7 +35,7 @@ struct Prot(i32);
 impl fmt::Debug for Prot {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         #[cfg(not(windows))]
-        const PROTS: [(libc::c_int, &str); 3] = [
+        const PROTS: [(c_int, &str); 3] = [
             (libc::PROT_READ, "PROT_READ"),
             (libc::PROT_WRITE, "PROT_WRITE"),
             (libc::PROT_EXEC, "PROT_EXEC"),

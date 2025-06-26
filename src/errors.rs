@@ -1,7 +1,7 @@
 /// A specialized [`Result`] type for this crate.
 ///
 /// [`Result`]: ::std::result::Result
-use std::fmt;
+use std::{ffi::c_int, fmt};
 
 pub type Result<T> = ::std::result::Result<T, Error>;
 
@@ -15,7 +15,7 @@ pub enum ErrorKind {
     OutOfMemory,
     InternalError,
     NotImplemented,
-    UnknownError(libc::c_int),
+    UnknownError(c_int),
 }
 
 impl fmt::Display for ErrorKind {
@@ -28,13 +28,13 @@ impl fmt::Display for ErrorKind {
             ErrorKind::OutOfMemory => fmt.write_str("OutOfMemory"),
             ErrorKind::InternalError => fmt.write_str("InternalError"),
             ErrorKind::NotImplemented => fmt.write_str("NotImplemented"),
-            ErrorKind::UnknownError(x) => write!(fmt, "Error#{}", x),
+            ErrorKind::UnknownError(x) => write!(fmt, "Error#{x}"),
         }
     }
 }
 
-impl From<libc::c_int> for ErrorKind {
-    fn from(value: libc::c_int) -> Self {
+impl From<c_int> for ErrorKind {
+    fn from(value: c_int) -> Self {
         // These values are from the plthook.h file.
         match value {
             1 => ErrorKind::FileNotFound,

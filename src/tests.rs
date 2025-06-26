@@ -1,8 +1,9 @@
-use crate::ffi::*;
-use crate::ObjectFile;
-use libc::{c_char, c_double, c_int};
+use std::ffi::{c_char, c_double, c_int};
 use std::mem::MaybeUninit;
 use std::sync::Mutex;
+
+use crate::ffi::*;
+use crate::ObjectFile;
 
 lazy_static::lazy_static! {
     static ref MUTEX: Mutex<()> = Mutex::new(());

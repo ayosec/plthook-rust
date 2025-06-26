@@ -2,7 +2,7 @@
 
 #![allow(non_camel_case_types)]
 
-use libc::{c_char, c_int, c_uint, c_void};
+use std::ffi::{c_char, c_int, c_uint, c_void};
 
 pub(crate) type plthook_t = *const c_void;
 
@@ -55,7 +55,7 @@ pub(crate) unsafe fn plthook_enum_with_prot(
 pub(crate) mod exts {
     use super::plthook_t;
     use crate::errors::{Error, ErrorKind, Result};
-    use std::ffi::CStr;
+    use std::ffi::{c_char, c_int, CStr};
     use std::mem::MaybeUninit;
 
     // Wrapper for the `plthook_open` function.
@@ -63,7 +63,7 @@ pub(crate) mod exts {
     // # Safety
     //
     // `filename` has be a `NULL`-terminated string, or `NULL`.
-    pub(crate) unsafe fn open_cstr(filename: *const libc::c_char) -> Result<plthook_t> {
+    pub(crate) unsafe fn open_cstr(filename: *const c_char) -> Result<plthook_t> {
         let mut c_object = MaybeUninit::uninit();
         check(super::plthook_open(c_object.as_mut_ptr(), filename))?;
         Ok(c_object.assume_init())
@@ -121,7 +121,7 @@ pub(crate) mod exts {
     }
 
     // Check if the response from a C function succeeded.
-    pub(crate) fn check(ret: libc::c_int) -> Result<()> {
+    pub(crate) fn check(ret: c_int) -> Result<()> {
         if ret == 0 {
             return Ok(());
         }
